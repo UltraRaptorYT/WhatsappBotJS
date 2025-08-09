@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-// reuse the same in-memory store from the other file
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const anyGlobal = globalThis as any;
 if (!anyGlobal.__LOG_STREAMS__)
   anyGlobal.__LOG_STREAMS__ = new Map<

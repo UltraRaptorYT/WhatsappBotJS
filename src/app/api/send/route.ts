@@ -98,6 +98,7 @@ async function runPlaywrightJob(args: {
   // read Excel
   const wb = read(await fs.readFile(namelistPath));
   const ws = wb.Sheets[wb.SheetNames[0]];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = utils.sheet_to_json<Record<string, any>>(ws, {
     defval: "",
   });
