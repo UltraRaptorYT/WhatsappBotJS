@@ -99,7 +99,7 @@ export async function POST(req: Request) {
       const buf3 = await login_page.screenshot({ type: "png" });
       appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf3.toString("base64")}`);
       appendLog(jobId, "Screenshot captured");
-      await login_page.waitForTimeout(1000);
+      await sleep(1000);
 
       // Open the Menu Dropdown
       await login_page.waitForSelector('[title="Menu"]');
