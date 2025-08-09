@@ -53,7 +53,7 @@ export async function POST(req: Request) {
 
       const failed_numbers = [];
 
-      for (let phone_number of ["83442098"]) {
+      for (const phone_number of ["83442098"]) {
         const page = await browser.newPage();
         await preparePage(page);
         await page.goto(
@@ -152,6 +152,7 @@ export async function POST(req: Request) {
       appendLog(jobId, "Screenshot captured");
 
       appendLog(jobId, "Done.");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       appendLog(jobId, `ERROR: ${e?.message || String(e)}`);
     } finally {

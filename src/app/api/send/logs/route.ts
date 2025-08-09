@@ -39,8 +39,8 @@ export async function GET(req: NextRequest) {
     } catch {}
   };
 
-  // @ts-ignore
-  req.signal?.addEventListener?.("abort", close);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (req.signal as any)?.addEventListener?.("abort", close);
 
   return new Response(readable, {
     headers: {

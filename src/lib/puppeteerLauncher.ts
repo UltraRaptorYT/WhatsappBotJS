@@ -46,9 +46,8 @@ export async function launchPuppeteer(): Promise<LaunchResult> {
   return { browser, isDev };
 }
 
-/** Apply lightweight stealth: UA, webdriver, languages, plugins */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function preparePage(page: any) {
-  // Pretend not automated
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => false });
     Object.defineProperty(navigator, "languages", {
@@ -58,7 +57,6 @@ export async function preparePage(page: any) {
     Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3] });
   });
 
-  // Use a recent Chrome UA; remove "Headless"
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
       "AppleWebKit/537.36 (KHTML, like Gecko) " +
