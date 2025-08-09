@@ -18,6 +18,7 @@ export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -26,9 +27,18 @@ export default function Home() {
     setSubmitting(true);
     setLogs((l) => [...l, "Starting job..."]);
 
+    // revoke old screenshot
+    if (imageUrl && imageUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(imageUrl);
+    }
+    setImageUrl(null);
+
     try {
       const fd = new FormData(formRef.current);
-      const res = await fetch("/api/send", { method: "POST", body: fd });
+      const res = await fetch(
+        `/api/send?url=${encodeURIComponent("https://web.whatsapp.com/")}`,
+        { method: "POST", body: fd }
+      );
       if (!res.ok) {
         setLogs((l) => [...l, "Start failed"]);
         return;
@@ -36,7 +46,6 @@ export default function Home() {
       const { jobId } = await res.json();
       setJobId(jobId);
       setLogs((l) => [...l, `Job started: ${jobId}`]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setLogs((l) => [...l, `Error: ${err?.message || err}`]);
     } finally {
@@ -44,18 +53,35 @@ export default function Home() {
     }
   };
 
+  // Stream logs + image via SSE
   useEffect(() => {
     if (!jobId) return;
     const es = new EventSource(
       `/api/send/logs?jobId=${encodeURIComponent(jobId)}`
     );
+
     es.onmessage = (ev) => setLogs((l) => [...l, ev.data]);
+
+    es.addEventListener("image", (ev: MessageEvent) => {
+      const b64 = ev.data as string;
+      setImageUrl(`data:image/jpeg;base64,${b64}`);
+    });
+
     es.onerror = () => {
       setLogs((l) => [...l, "Log stream closed"]);
       es.close();
     };
     return () => es.close();
   }, [jobId]);
+
+  // Cleanup blob URL when unmounting
+  useEffect(() => {
+    return () => {
+      if (imageUrl && imageUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(imageUrl);
+      }
+    };
+  }, [imageUrl]);
 
   const clearLogs = () => setLogs([]);
 
@@ -132,11 +158,32 @@ export default function Home() {
 
           <div className="grid gap-2">
             <Label>Logs</Label>
-            <ScrollArea className="h-72 rounded-md border">
+            <ScrollArea className="h-72 rounded-md border max-w-2xl">
               <pre className="p-4 text-sm">
                 {logs.length ? logs.join("\n") : "Logs will appear here..."}
               </pre>
             </ScrollArea>
+          </div>
+
+          <Separator className="my-6" />
+
+          <div className="grid gap-2">
+            <Label>Screenshot Result</Label>
+            <div className="rounded border p-3">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt="Result screenshot"
+                  className="w-full h-auto rounded"
+                />
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  {jobId
+                    ? "Waiting for screenshot..."
+                    : "Start a job to see the screenshot here."}
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
         <CardFooter className="text-xs text-muted-foreground">

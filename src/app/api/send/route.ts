@@ -1,298 +1,166 @@
-import { NextRequest, NextResponse } from "next/server";
-import * as fs from "fs/promises";
-import * as fssync from "fs";
-import * as path from "path";
+import { NextResponse } from "next/server";
 import crypto from "crypto";
-import os from "os";
-import { read, utils } from "xlsx";
-import { chromium } from "playwright";
-import fetch from "node-fetch";
+import { appendLog } from "@/lib/demoStore";
+import { launchPuppeteer, preparePage } from "@/lib/puppeteerLauncher";
+import { sleep } from "@/lib/utils";
 
-type LogFn = (msg: string) => void;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// very basic in-memory log store for demo
-const logStreams = new Map<
-  string,
-  { logs: string[]; listeners: Set<(line: string) => void> }
->();
-
-function getLogger(jobId: string): LogFn {
-  if (!logStreams.has(jobId)) {
-    logStreams.set(jobId, { logs: [], listeners: new Set() });
-  }
-  return (msg: string) => {
-    const line = `[${new Date().toISOString()}] ${msg}`;
-    const store = logStreams.get(jobId)!;
-    store.logs.push(line);
-    for (const fn of store.listeners) fn(line);
-    // also print to server stdout
-    console.log(line);
-  };
-}
-
-const TMP_BASE =
-  (os.tmpdir && os.tmpdir()) || path.join(process.cwd(), "uploads", "tmp");
-
-async function ensureDir(dir: string) {
-  if (!fssync.existsSync(dir)) {
-    await fs.mkdir(dir, { recursive: true });
-  }
-}
-
-async function saveFileToTmp(f: File, base = TMP_BASE) {
-  await ensureDir(base); // <-- important
-  const buf = Buffer.from(await f.arrayBuffer());
-  const outPath = path.join(base, `${crypto.randomUUID()}-${f.name}`);
-  await fs.writeFile(outPath, buf);
-  return outPath;
-}
-
-export async function POST(req: NextRequest) {
-  const form = await req.formData();
-
-  const namelist = form.get("namelist") as File | null;
-  const message = form.get("message") as File | null;
-  const images = form.getAll("images") as File[];
-  const document = (form.get("document") as File | null) || null;
-
-  if (!namelist || !message) {
-    return NextResponse.json({ error: "Missing files" }, { status: 400 });
-  }
-
+export async function POST(req: Request) {
   const jobId = crypto.randomUUID();
-  const log = getLogger(jobId);
-  log(`Job received`);
+  appendLog(jobId, "Job received");
+  appendLog(jobId, "Launching browser...");
 
-  // persist uploads
-  const namelistPath = await saveFileToTmp(namelist);
-  const messagePath = await saveFileToTmp(message);
-  const imagePaths: string[] = [];
-  for (const img of images) imagePaths.push(await saveFileToTmp(img));
-  const documentPath = document ? await saveFileToTmp(document) : null;
+  // let clients optionally pass a target URL (defaults to example.com)
+  const url = new URL(req.url).searchParams.get("url") || "http://example.com/";
 
-  // fire-and-forget the worker
-  runPlaywrightJob({
-    jobId,
-    log,
-    namelistPath,
-    messagePath,
-    imagePaths,
-    documentPath,
-  }).catch((e) => log(`Fatal error: ${e?.stack || e}`));
+  (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let browser: any = null;
+
+    try {
+      const { browser: b } = await launchPuppeteer();
+      browser = b;
+
+      const login_page = await browser.newPage();
+
+      await login_page.setDefaultTimeout(0);
+      await login_page.setDefaultNavigationTimeout(0);
+      await preparePage(login_page);
+
+      appendLog(jobId, "Opened new page");
+      appendLog(jobId, `Navigating to ${url}`);
+
+      await login_page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
+      await login_page.waitForSelector(
+        '[aria-label="Scan this QR code to link a device!"]'
+      );
+
+      const buf = await login_page.screenshot({ type: "png" });
+      appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf.toString("base64")}`);
+      appendLog(jobId, "Screenshot captured");
+
+      await login_page.waitForSelector("header", {
+        timeout: 0,
+        visible: true,
+      });
+
+      appendLog(jobId, "QR Code Scanned");
+      const buf2 = await login_page.screenshot({ type: "png" });
+      appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf2.toString("base64")}`);
+      appendLog(jobId, "Screenshot captured");
+
+      const failed_numbers = [];
+
+      for (let phone_number of ["83442098"]) {
+        const page = await browser.newPage();
+        await preparePage(page);
+        await page.goto(
+          `https://web.whatsapp.com/send?phone=${phone_number}&text=${encodeURIComponent(
+            "hello world"
+          )}`,
+          { waitUntil: "domcontentloaded", timeout: 0 }
+        );
+        const buf7 = await page.screenshot({ type: "png" });
+        appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf7.toString("base64")}`);
+        appendLog(jobId, "Screenshot captured");
+        await page.waitForSelector("header", { visible: true, timeout: 0 });
+        const buf1 = await page.screenshot({ type: "png" });
+        appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf1.toString("base64")}`);
+        appendLog(jobId, "Screenshot captured");
+        const element = await page.$(
+          '[aria-label="Phone number shared via url is invalid."]'
+        );
+        if (element) {
+          failed_numbers.push(phone_number);
+          appendLog(`${phone_number} Failed!`, "ERROR");
+          await page.close();
+          continue; // if inside a loop
+        }
+        const buf12 = await page.screenshot({ type: "png" });
+        appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf12.toString("base64")}`);
+        appendLog(jobId, "Screenshot captured");
+        sleep(1000);
+        await page.click('button[data-tab="11"] > span');
+      }
+
+      await login_page.waitForFunction(() =>
+        [...document.querySelectorAll(".x1v8p93f")].some((el) =>
+          el.textContent?.includes("Use here")
+        )
+      );
+      const useHereBtn = await login_page.evaluateHandle(() =>
+        [...document.querySelectorAll(".x1v8p93f")].find((el) =>
+          el.textContent?.includes("Use here")
+        )
+      );
+      await useHereBtn.click();
+      const buf3 = await login_page.screenshot({ type: "png" });
+      appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf3.toString("base64")}`);
+      appendLog(jobId, "Screenshot captured");
+      await login_page.waitForTimeout(1000);
+
+      // Open the Menu Dropdown
+      await login_page.waitForSelector('[title="Menu"]');
+      await login_page.click('[title="Menu"]');
+      await sleep(1000);
+      const buf4 = await login_page.screenshot({ type: "png" });
+      appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf4.toString("base64")}`);
+      appendLog(jobId, "Screenshot captured");
+
+      // Click on "Log out" in menu
+      await login_page.waitForFunction(() =>
+        [...document.querySelectorAll("*")].some(
+          (el) => el.textContent?.trim() === "Log out"
+        )
+      );
+      const logOutMenuItem = await login_page.evaluateHandle(() =>
+        [...document.querySelectorAll("*")].find(
+          (el) => el.textContent?.trim() === "Log out"
+        )
+      );
+      await logOutMenuItem.click();
+      await sleep(1000);
+      const buf5 = await login_page.screenshot({ type: "png" });
+      appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf5.toString("base64")}`);
+      appendLog(jobId, "Screenshot captured");
+
+      // Confirm "Log out" button
+      await login_page.waitForFunction(() =>
+        [...document.querySelectorAll(".x1v8p93f")].some((el) =>
+          el.textContent?.includes("Log out")
+        )
+      );
+      const confirmLogOutBtn = await login_page.evaluateHandle(() =>
+        [...document.querySelectorAll(".x1v8p93f")].find((el) =>
+          el.textContent?.includes("Log out")
+        )
+      );
+      await confirmLogOutBtn.click();
+      await sleep(1000);
+      const buf6 = await login_page.screenshot({ type: "png" });
+      appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf6.toString("base64")}`);
+      appendLog(jobId, "Screenshot captured");
+
+      // Check logout confirmed (QR code visible)
+      await login_page.waitForSelector(
+        '[aria-label="Scan this QR code to link a device!"]'
+      );
+      const buf7 = await login_page.screenshot({ type: "png" });
+      appendLog(jobId, `__IMAGE_JPEG_BASE64__:${buf7.toString("base64")}`);
+      appendLog(jobId, "Screenshot captured");
+
+      appendLog(jobId, "Done.");
+    } catch (e: any) {
+      appendLog(jobId, `ERROR: ${e?.message || String(e)}`);
+    } finally {
+      try {
+        await browser?.close();
+      } catch {}
+      appendLog(jobId, "Browser closed");
+    }
+  })();
 
   return NextResponse.json({ jobId });
-}
-
-async function runPlaywrightJob(args: {
-  jobId: string;
-  log: LogFn;
-  namelistPath: string;
-  messagePath: string;
-  imagePaths: string[];
-  documentPath: string | null;
-}) {
-  const { jobId, log, namelistPath, messagePath, imagePaths, documentPath } =
-    args;
-  const failedNumbers: string[] = [];
-
-  // read Excel
-  const wb = read(await fs.readFile(namelistPath));
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = utils.sheet_to_json<Record<string, any>>(ws, {
-    defval: "",
-  });
-
-  if (!rows.length || !("Mobile Number" in rows[0])) {
-    log(`Missing 'Mobile Number' column`);
-    return;
-  }
-
-  // read template
-  const baseMessage = (await fs.readFile(messagePath, "utf8")).toString();
-
-  const browser = await chromium.launch({
-    headless: false,
-    args: ["--no-sandbox"],
-  });
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-  });
-
-  const loginPage = await context.newPage();
-  await loginPage.goto("https://web.whatsapp.com", {
-    waitUntil: "domcontentloaded",
-    timeout: 0,
-  });
-  log("Please scan QR and wait for WhatsApp Web to load...");
-  await loginPage.waitForSelector("header", { timeout: 0 });
-
-  // optional “Continue” click if present
-  const continueBtn = await loginPage
-    .locator("button:has-text('Continue')")
-    .first();
-  if (await continueBtn.isVisible().catch(() => false)) {
-    await continueBtn.click();
-    log("Clicked Continue");
-  }
-
-  for (const row of rows) {
-    let phoneNumber = String(row["Mobile Number"]).trim();
-    if (!phoneNumber) continue;
-    if (!phoneNumber.startsWith("+")) phoneNumber = `+65${phoneNumber}`;
-
-    // build message
-    let msg = baseMessage;
-    for (const [k, v] of Object.entries(row)) {
-      msg = msg.replaceAll(`{${k}}`, String(v ?? ""));
-    }
-
-    // per-row custom image support via "ImageURL"
-    const perRowImages: string[] = [];
-    const imgUrl = String(row["ImageURL"] || "").trim();
-    if (imgUrl) {
-      try {
-        if (imgUrl.startsWith("http://") || imgUrl.startsWith("https://")) {
-          const r = await fetch(imgUrl);
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const buf = Buffer.from(await r.arrayBuffer());
-          const p = `/tmp/${crypto.randomUUID()}.png`;
-          await fs.writeFile(p, buf);
-          perRowImages.push(p);
-          log(`Downloaded image for ${phoneNumber}`);
-        } else {
-          // trust local path if you mount it
-          perRowImages.push(imgUrl);
-        }
-      } catch (e) {
-        log(`Failed to load per-row image for ${phoneNumber}: ${e}`);
-      }
-    }
-
-    const page = await context.newPage();
-    await page.goto(
-      `https://web.whatsapp.com/send?phone=${encodeURIComponent(
-        phoneNumber
-      )}&text=${encodeURIComponent(msg)}`,
-      { waitUntil: "domcontentloaded" }
-    );
-    await page.waitForSelector("header", { timeout: 0 });
-    await page.waitForTimeout(1000);
-
-    // invalid number check
-    const invalid = await page
-      .locator('[aria-label="Phone number shared via url is invalid."]')
-      .first();
-    if (await invalid.isVisible().catch(() => false)) {
-      failedNumbers.push(phoneNumber);
-      log(`${phoneNumber} invalid. Skipping.`);
-      await page.close();
-      continue;
-    }
-
-    // // open attachment menu
-    // const attachBtn = page.locator(
-    //   '[data-tab="6"] [data-animate-media], [data-tab="6"] div[role="button"][title]'
-    // );
-    // // WhatsApp updates frequently. Fallback selector below:
-    // await attachBtn
-    //   .first()
-    //   .click({ trial: true })
-    //   .catch(() => {});
-    // await attachBtn
-    //   .first()
-    //   .click()
-    //   .catch(() => {});
-
-    // // send document if provided
-    // if (documentPath !== "" && documentPath) {
-    //   log(`Uploading document for ${phoneNumber}`);
-    //   // Click "Attach" then choose "Document" input
-    //   // There is a hidden <input type="file"> rendered. Use setInputFiles on it.
-    //   const docInput = page
-    //     .locator(
-    //       'input[type="file"][accept*=".pdf"], input[type="file"][accept*="document"]'
-    //     )
-    //     .first();
-    //   // If the above does not match, broader fallback:
-    //   const anyInput = docInput.or(page.locator('input[type="file"]')).first();
-    //   await anyInput.setInputFiles(documentPath);
-    //   // wait for preview and send
-    //   // WhatsApp shows a send button after file chosen
-    //   await page.waitForTimeout(1000);
-    //   const sendBtn = page
-    //     .locator('span[data-icon="send"], [aria-label="Send"]')
-    //     .last();
-    //   await sendBtn.click().catch(() => {});
-    //   log(`Sent document to ${phoneNumber}`);
-    // }
-
-    // // send images (row + global)
-    // const allImages = [...perRowImages, ...imagePaths];
-    // if (allImages.length) {
-    //   // open attach menu again
-    //   await attachBtn
-    //     .first()
-    //     .click()
-    //     .catch(() => {});
-    //   // photo/video input
-    //   const imgInput = page
-    //     .locator(
-    //       'input[type="file"][accept*="image"], input[type="file"][accept*="video"]'
-    //     )
-    //     .first();
-    //   const files = allImages.map((p) => p);
-    //   await imgInput.setInputFiles(files);
-    //   await page.waitForTimeout(1000);
-    //   const sendBtn = page
-    //     .locator('span[data-icon="send"], [aria-label="Send"]')
-    //     .last();
-    //   await sendBtn.click().catch(() => {});
-    //   log(`Sent ${files.length} image(s) to ${phoneNumber}`);
-    // }
-
-    // finally send text if not already sent by Enter
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(1000);
-
-    // delivery check: look for check marks on last outgoing message
-    try {
-      const lastOutgoing = page
-        .locator('[data-tab="8"] div.message-out')
-        .last();
-      await lastOutgoing.waitFor({ timeout: 20000 });
-      const hasCheck = await lastOutgoing
-        .locator('[data-icon="msg-check"], [data-icon="msg-dblcheck"]')
-        .count();
-      if (hasCheck > 0)
-        log(`${phoneNumber} message sent (check mark detected)`);
-      else log(`${phoneNumber} sent but no checkmark found`);
-    } catch {
-      log(`${phoneNumber} may not be delivered (timeout)`);
-    }
-
-    await page.close();
-  }
-
-  // logout sequence
-  try {
-    await loginPage.bringToFront();
-    // Use-here button if session conflict
-    const useHere = loginPage.locator(':text("Use here")').first();
-    if (await useHere.isVisible().catch(() => false)) await useHere.click();
-
-    await loginPage.locator('[title="Menu"]').click();
-    await loginPage.locator(':text("Log out")').first().click();
-    await loginPage.locator(':text("Log out")').first().click();
-    await loginPage.waitForSelector('[aria-label*="Scan this QR code"]', {
-      timeout: 15000,
-    });
-    log("Logged out");
-  } catch (e) {
-    log(`Logout step skipped or failed: ${e}`);
-  }
-
-  await browser.close();
-  log(`Failed numbers: ${JSON.stringify(failedNumbers)}`);
-  log("Process COMPLETED.");
 }

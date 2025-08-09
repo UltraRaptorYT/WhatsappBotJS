@@ -1,23 +1,8 @@
 import { NextRequest } from "next/server";
+import { subscribe } from "@/lib/demoStore";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const anyGlobal = globalThis as any;
-if (!anyGlobal.__LOG_STREAMS__)
-  anyGlobal.__LOG_STREAMS__ = new Map<
-    string,
-    { logs: string[]; listeners: Set<(line: string) => void> }
-  >();
-const logStreams: Map<
-  string,
-  { logs: string[]; listeners: Set<(line: string) => void> }
-> = anyGlobal.__LOG_STREAMS__;
-
-// tiny helper so both routes share storage
-function getStore(jobId: string) {
-  if (!logStreams.has(jobId))
-    logStreams.set(jobId, { logs: [], listeners: new Set() });
-  return logStreams.get(jobId)!;
-}
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -28,32 +13,34 @@ export async function GET(req: NextRequest) {
   const writer = writable.getWriter();
   const enc = new TextEncoder();
 
-  const store = getStore(jobId);
+  const unsub = subscribe(jobId, async (line) => {
+    try {
+      if (line.startsWith("__IMAGE_JPEG_BASE64__:")) {
+        const b64 = line.slice("__IMAGE_JPEG_BASE64__:".length);
+        await writer.write(enc.encode(`event: image\ndata: ${b64}\n\n`));
+      } else if (line.startsWith("__IMAGE_PNG_BASE64__:")) {
+        const b64 = line.slice("__IMAGE_PNG_BASE64__:".length);
+        await writer.write(enc.encode(`event: image\ndata: ${b64}\n\n`));
+      } else {
+        await writer.write(enc.encode(`data: ${line}\n\n`));
+      }
+    } catch {}
+  });
 
-  // send backlog
-  for (const l of store.logs) {
-    await writer.write(enc.encode(`data: ${l}\n\n`));
-  }
-
-  const listener = async (line: string) => {
-    await writer.write(enc.encode(`data: ${line}\n\n`));
-  };
-
-  store.listeners.add(listener);
-
-  // keep-alive
-  const ka = setInterval(async () => {
-    await writer.write(enc.encode(`:\n\n`));
+  const ping = setInterval(() => {
+    writer.write(enc.encode(`:\n\n`)).catch(() => {});
   }, 15000);
 
   const close = () => {
-    clearInterval(ka);
-    store.listeners.delete(listener);
-    writer.close();
+    clearInterval(ping);
+    unsub();
+    try {
+      writer.close();
+    } catch {}
   };
 
-  // when client disconnects
-  req.signal.addEventListener("abort", close);
+  // @ts-ignore
+  req.signal?.addEventListener?.("abort", close);
 
   return new Response(readable, {
     headers: {
