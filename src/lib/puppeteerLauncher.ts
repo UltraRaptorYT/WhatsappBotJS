@@ -53,8 +53,10 @@ export async function preparePage(page: any) {
     Object.defineProperty(navigator, "languages", {
       get: () => ["en-US", "en"],
     });
-    // @ts-ignore
-    Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Object.defineProperty(navigator as any, "plugins", {
+      get: () => [1, 2, 3],
+    });
   });
 
   await page.setUserAgent(

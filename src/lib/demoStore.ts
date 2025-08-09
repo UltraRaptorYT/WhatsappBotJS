@@ -1,5 +1,6 @@
 type Listener = (line: string) => void;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const g = globalThis as any;
 if (!g.__DEMO_STREAM__) g.__DEMO_STREAM__ = new Map<string, Set<Listener>>();
 export const listeners: Map<string, Set<Listener>> = g.__DEMO_STREAM__;
