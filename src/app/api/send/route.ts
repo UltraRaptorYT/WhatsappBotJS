@@ -83,6 +83,7 @@ export async function POST(req: Request) {
         appendLog(jobId, "Screenshot captured");
         sleep(1000);
         await page.click('button[data-tab="11"] > span');
+        sleep(5000);
       }
 
       await login_page.waitForFunction(() =>
