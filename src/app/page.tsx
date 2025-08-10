@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 
 export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -26,6 +27,7 @@ export default function Home() {
     e.preventDefault();
     if (!formRef.current) return;
     setSubmitting(true);
+    toast.success("Starting job...");
     setLogs((l) => [...l, "Starting job..."]);
 
     // revoke old screenshot
@@ -50,7 +52,8 @@ export default function Home() {
     } catch (err: any) {
       setLogs((l) => [...l, `Error: ${err?.message || err}`]);
     } finally {
-      setSubmitting(false);
+    toast.success("Completed!");
+    setSubmitting(false);
     }
   };
 
@@ -166,16 +169,14 @@ export default function Home() {
 
             <div className="grid gap-2">
               <Label>Logs</Label>
-              <div>
-                <ScrollArea
-                  className="max-h-72 overflow-y-auto rounded-md border"
-                  ref={logsContainerRef}
-                >
-                  <pre className="p-4 text-sm whitespace-pre-wrap break-words">
-                    {logs.length ? logs.join("\n") : "Logs will appear here..."}
-                  </pre>
-                </ScrollArea>
-              </div>
+              <ScrollArea
+                className="max-h-72 overflow-y-auto rounded-md border h-72"
+                ref={logsContainerRef}
+              >
+                <pre className="p-4 text-sm whitespace-pre-wrap break-words">
+                  {logs.length ? logs.join("\n") : "Logs will appear here..."}
+                </pre>
+              </ScrollArea>
             </div>
           </CardContent>
           <CardFooter className="text-xs text-muted-foreground">
