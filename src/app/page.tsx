@@ -49,11 +49,12 @@ export default function Home() {
       const { jobId } = await res.json();
       setJobId(jobId);
       setLogs((l) => [...l, `Job started: ${jobId}`]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setLogs((l) => [...l, `Error: ${err?.message || err}`]);
     } finally {
-    toast.success("Completed!");
-    setSubmitting(false);
+      toast.success("Completed!");
+      setSubmitting(false);
     }
   };
 
