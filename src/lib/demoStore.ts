@@ -5,11 +5,17 @@ const g = globalThis as any;
 if (!g.__DEMO_STREAM__) g.__DEMO_STREAM__ = new Map<string, Set<Listener>>();
 export const listeners: Map<string, Set<Listener>> = g.__DEMO_STREAM__;
 
-export function appendLog(jobId: string, line: string) {
+export function appendLog(
+  jobId: string,
+  line: string,
+  logType: string = "INFO"
+) {
   const isImage =
     line.startsWith("__IMAGE_JPEG_BASE64__:") ||
     line.startsWith("__IMAGE_PNG_BASE64__:");
-  const msg = isImage ? line : `[${new Date().toISOString()}] ${line}`;
+  const msg = isImage
+    ? line
+    : `[${new Date().toISOString()}] [${logType}] : ${line}`;
 
   const set = listeners.get(jobId);
   if (!set) return;

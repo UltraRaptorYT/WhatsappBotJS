@@ -20,6 +20,7 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +47,6 @@ export default function Home() {
       const { jobId } = await res.json();
       setJobId(jobId);
       setLogs((l) => [...l, `Job started: ${jobId}`]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setLogs((l) => [...l, `Error: ${err?.message || err}`]);
     } finally {
@@ -65,7 +65,7 @@ export default function Home() {
 
     es.addEventListener("image", (ev: MessageEvent) => {
       const b64 = ev.data as string;
-      setImageUrl(`data:image/jpeg;base64,${b64}`);
+      setImageUrl(`data:image/png;base64,${b64}`);
     });
 
     es.onerror = () => {
@@ -84,113 +84,131 @@ export default function Home() {
     };
   }, [imageUrl]);
 
+  useEffect(() => {
+    const root = logsContainerRef.current;
+    if (!root) return;
+    root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
+  }, [logs]);
+
   const clearLogs = () => setLogs([]);
 
   return (
-    <div className="container mx-auto max-w-3xl p-6">
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>WhatsApp Mass Sender</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form ref={formRef} onSubmit={onSubmit} className="grid gap-6">
-            <div className="grid gap-2">
-              <Label htmlFor="namelist">
-                Excel (.xlsx) with “Mobile Number” column
-              </Label>
-              <Input
-                id="namelist"
-                name="namelist"
-                type="file"
-                accept=".xlsx"
-                required
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="message">Message Template (.txt)</Label>
-              <Input
-                id="message"
-                name="message"
-                type="file"
-                accept=".txt"
-                required
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="images">
-                Optional Images (png, jpg, jpeg, gif, bmp, ico, webp)
-              </Label>
-              <Input
-                id="images"
-                name="images"
-                type="file"
-                multiple
-                accept=".png,.jpg,.jpeg,.gif,.bmp,.ico,.webp"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="document">Optional Document</Label>
-              <Input id="document" name="document" type="file" />
-            </div>
-
-            <div className="flex gap-3">
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Starting..." : "Send Message"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  formRef.current?.reset();
-                }}
-              >
-                Reset
-              </Button>
-              <Button type="button" variant="outline" onClick={clearLogs}>
-                Clear Logs
-              </Button>
-            </div>
-          </form>
-
-          <Separator className="my-6" />
-
-          <div className="grid gap-2">
-            <Label>Logs</Label>
-            <ScrollArea className="h-72 rounded-md border max-w-2xl">
-              <pre className="p-4 text-sm">
-                {logs.length ? logs.join("\n") : "Logs will appear here..."}
-              </pre>
-            </ScrollArea>
-          </div>
-
-          <Separator className="my-6" />
-
-          <div className="grid gap-2">
-            <Label>Screenshot Result</Label>
-            <div className="rounded border p-3">
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="Result screenshot"
-                  className="w-full h-auto rounded"
+    <div className="container mx-auto max-w-7xl p-6 flex min-h-[100dvh]">
+      {/* Two-column layout: left form/logs, right screenshot */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* LEFT: form + logs */}
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle>WhatsApp Mass Sender</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form ref={formRef} onSubmit={onSubmit} className="grid gap-6">
+              <div className="grid gap-2">
+                <Label htmlFor="namelist">
+                  Excel (.xlsx) with “Mobile Number” column
+                </Label>
+                <Input
+                  id="namelist"
+                  name="namelist"
+                  type="file"
+                  accept=".xlsx"
+                  required
                 />
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  {jobId
-                    ? "Waiting for screenshot..."
-                    : "Start a job to see the screenshot here."}
-                </div>
-              )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="message">Message Template (.txt)</Label>
+                <Input
+                  id="message"
+                  name="message"
+                  type="file"
+                  accept=".txt"
+                  required
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="images">
+                  Optional Images (png, jpg, jpeg, gif, bmp, ico, webp)
+                </Label>
+                <Input
+                  id="images"
+                  name="images"
+                  type="file"
+                  multiple
+                  accept=".png,.jpg,.jpeg,.gif,.bmp,.ico,.webp"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="document">Optional Document</Label>
+                <Input id="document" name="document" type="file" />
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? "Starting..." : "Send Message"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => formRef.current?.reset()}
+                >
+                  Reset
+                </Button>
+                <Button type="button" variant="outline" onClick={clearLogs}>
+                  Clear Logs
+                </Button>
+              </div>
+            </form>
+
+            <Separator className="my-6" />
+
+            <div className="grid gap-2">
+              <Label>Logs</Label>
+              <div>
+                <ScrollArea
+                  className="max-h-72 overflow-y-auto rounded-md border"
+                  ref={logsContainerRef}
+                >
+                  <pre className="p-4 text-sm whitespace-pre-wrap break-words">
+                    {logs.length ? logs.join("\n") : "Logs will appear here..."}
+                  </pre>
+                </ScrollArea>
+              </div>
             </div>
-          </div>
-        </CardContent>
-        <CardFooter className="text-xs text-muted-foreground">
-          {jobId ? `Job ID: ${jobId}` : "No active job"}
-        </CardFooter>
-      </Card>
+          </CardContent>
+          <CardFooter className="text-xs text-muted-foreground">
+            {jobId ? `Job ID: ${jobId}` : "No active job"}
+          </CardFooter>
+        </Card>
+
+        {/* RIGHT: big screenshot panel */}
+        <Card className="shadow-lg lg:sticky lg:top-6 self-start h-full w-full col-span-2">
+          <CardHeader>
+            <CardTitle>Screenshot Result</CardTitle>
+          </CardHeader>
+          <CardContent className="my-auto">
+            <div className="rounded border overflow-hidden bg-black/5">
+              <div className="aspect-video w-full">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt="Result screenshot"
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
+                    {jobId
+                      ? "Waiting for screenshot..."
+                      : "Start a job to see the screenshot here."}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
