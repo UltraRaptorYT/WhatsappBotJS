@@ -27,7 +27,6 @@ export default function Home() {
     e.preventDefault();
     if (!formRef.current) return;
     setSubmitting(true);
-    toast.success("Starting job...");
     setLogs((l) => [...l, "Starting job..."]);
 
     // revoke old screenshot
@@ -53,7 +52,6 @@ export default function Home() {
     } catch (err: any) {
       setLogs((l) => [...l, `Error: ${err?.message || err}`]);
     } finally {
-      toast.success("Completed!");
       setSubmitting(false);
     }
   };
@@ -65,7 +63,22 @@ export default function Home() {
       `/api/send/logs?jobId=${encodeURIComponent(jobId)}`
     );
 
-    es.onmessage = (ev) => setLogs((l) => [...l, ev.data]);
+    es.onmessage = (ev) => {
+      const line: string = ev.data;
+      const message = line.split(" : ").slice(-1)[0];
+      if (line.startsWith("[")) {
+        if (line.includes("[ERROR]")) {
+          toast.error(message);
+        } else if (line.includes("[INFO]")) {
+          toast.info(message);
+        } else if (line.includes("[SUCESS]")) {
+          toast.success(message, { duration: 5000 });
+        } else {
+          toast.message(message);
+        }
+      }
+      return setLogs((l) => [...l, line]);
+    };
 
     es.addEventListener("image", (ev: MessageEvent) => {
       const b64 = ev.data as string;
