@@ -35,6 +35,7 @@ export async function POST(req: Request) {
   const wb = XLSX.read(new Uint8Array(ab), { type: "array" });
   const firstSheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[firstSheetName];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {
     defval: "",
     raw: false,

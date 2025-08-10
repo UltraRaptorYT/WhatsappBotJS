@@ -24,6 +24,7 @@ export function toE164(raw: string, defaultCC = "+65") {
   return null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function fillTemplate(tmpl: string, row: Record<string, any>) {
   // Replace {ColumnName} with row[ColumnName]; if missing, leave as-is
   return tmpl.replace(/\{([^}]+)\}/g, (_m, key) => {
