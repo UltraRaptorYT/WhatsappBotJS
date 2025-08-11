@@ -51,6 +51,7 @@ export default function Home() {
       const msg = `[${new Date().toISOString()}] [SUCCESS] : Job started: ${jobId}`;
       setLogs((l) => [...l, msg]);
       toast.success(msg);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const msg = `[${new Date().toISOString()}] [ERROR] : ${
         err?.message || err

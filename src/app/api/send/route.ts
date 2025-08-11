@@ -158,7 +158,7 @@ export async function POST(req: Request) {
 
       const failed_numbers = [];
       for (const entry of entries) {
-        const { phone_number, row, rowIndex } = entry;
+        const { phone_number, row } = entry;
 
         // Fill {ColumnName} placeholders from this row
         const text = fillTemplate(messageTemplate, row).trim();
