@@ -152,6 +152,27 @@ export async function POST(req: Request) {
         return s && s.display !== "none" && s.visibility !== "hidden";
       });
 
+      // Check for Continue Btn
+      const buttons = await page.$$("button");
+
+      let found = false;
+      for (const button of buttons) {
+        const text = await page.evaluate(
+          (el: HTMLButtonElement) => el.innerText.trim(),
+          button
+        );
+        if (text === "Continue") {
+          // Unable To Change To Chinese
+          await button.click();
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        console.log("No 'Continue' button found.");
+      }
+
       const afterLogin = await page.screenshot({ type: "png" });
       appendLog(jobId, `__IMAGE_PNG_BASE64__:${afterLogin.toString("base64")}`);
       appendLog(jobId, "QR Code scanned. Starting sends…");
