@@ -28,8 +28,8 @@ export default function Home() {
     if (!formRef.current) return;
     setSubmitting(true);
     setLogs((l) => [...l, "Starting job..."]);
+    toast.info("Starting job...");
 
-    // revoke old screenshot
     if (imageUrl && imageUrl.startsWith("blob:")) {
       URL.revokeObjectURL(imageUrl);
     }
@@ -43,41 +43,54 @@ export default function Home() {
       );
       if (!res.ok) {
         setLogs((l) => [...l, "Start failed"]);
+        toast.error("Start failed");
         return;
       }
       const { jobId } = await res.json();
       setJobId(jobId);
-      setLogs((l) => [...l, `Job started: ${jobId}`]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = `[${new Date().toISOString()}] [SUCCESS] : Job started: ${jobId}`;
+      setLogs((l) => [...l, msg]);
+      toast.success(msg);
     } catch (err: any) {
-      setLogs((l) => [...l, `Error: ${err?.message || err}`]);
+      const msg = `[${new Date().toISOString()}] [ERROR] : ${
+        err?.message || err
+      }`;
+      setLogs((l) => [...l, msg]);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Stream logs + image via SSE
   useEffect(() => {
     if (!jobId) return;
     const es = new EventSource(
       `/api/send/logs?jobId=${encodeURIComponent(jobId)}`
     );
 
+    const isImageLine = (line: string) =>
+      line.startsWith("__IMAGE_JPEG_BASE64__:") ||
+      line.startsWith("__IMAGE_PNG_BASE64__:");
+
     es.onmessage = (ev) => {
       const line: string = ev.data;
-      const message = line.split(" : ").slice(-1)[0];
-      if (line.startsWith("[")) {
-        if (line.includes("[ERROR]")) {
-          toast.error(message);
-        } else if (line.includes("[INFO]")) {
-          toast.info(message);
-        } else if (line.includes("[SUCESS]")) {
-          toast.success(message, { duration: 5000 });
-        } else {
-          toast.message(message);
-        }
-      }
-      return setLogs((l) => [...l, line]);
+      setLogs((l) => [...l, line]);
+
+      if (isImageLine(line)) return;
+
+      // Parse "[timestamp] [LEVEL] : message"
+      const message = line.includes(" : ")
+        ? line.split(" : ").slice(-1)[0]
+        : line;
+
+      const upper = line.toUpperCase();
+      if (upper.includes("[ERROR]")) toast.error(message);
+      else if (upper.includes("[WARN]") || upper.includes("[WARNING]"))
+        toast.message(message);
+      else if (upper.includes("[SUCCESS]") || upper.includes("[SUCESS]"))
+        toast.success(message, { duration: 20000 });
+      else if (upper.includes("[INFO]")) toast.info(message);
+      else toast.message(message);
     };
 
     es.addEventListener("image", (ev: MessageEvent) => {
@@ -86,13 +99,14 @@ export default function Home() {
     });
 
     es.onerror = () => {
-      setLogs((l) => [...l, "Log stream closed"]);
+      const msg = "Log stream closed";
+      setLogs((l) => [...l, msg]);
+      toast.message(msg);
       es.close();
     };
     return () => es.close();
   }, [jobId]);
 
-  // Cleanup blob URL when unmounting
   useEffect(() => {
     return () => {
       if (imageUrl && imageUrl.startsWith("blob:")) {
@@ -104,17 +118,47 @@ export default function Home() {
   useEffect(() => {
     const root = logsContainerRef.current;
     if (!root) return;
-    root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
+    const nearBottom =
+      root.scrollTop + root.clientHeight >= root.scrollHeight - 24;
+    if (nearBottom) {
+      root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
+    }
   }, [logs]);
 
   const clearLogs = () => setLogs([]);
 
   return (
     <div className="container mx-auto max-w-7xl p-6 flex min-h-[100dvh]">
-      {/* Two-column layout: left form/logs, right screenshot */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT: form + logs */}
-        <Card className="shadow-lg">
+      {/* Mobile: stacked; Desktop: 3-col grid */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3">
+        {/* --- Mobile Screenshot (top) --- */}
+        <Card className="shadow-lg lg:hidden">
+          <CardHeader>
+            <CardTitle>Screenshot Result</CardTitle>
+          </CardHeader>
+          <CardContent className="my-auto">
+            <div className="rounded border overflow-hidden bg-black/5">
+              <div className="aspect-video w-full">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt="Result screenshot"
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
+                    {jobId
+                      ? "Waiting for screenshot..."
+                      : "Start a job to see the screenshot here."}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* --- Left column: Form (mobile below screenshot; desktop left) --- */}
+        <Card className="shadow-lg lg:row-span-2">
           <CardHeader>
             <CardTitle>WhatsApp Mass Sender</CardTitle>
           </CardHeader>
@@ -123,6 +167,7 @@ export default function Home() {
               <div className="grid gap-2">
                 <Label htmlFor="namelist">
                   Excel (.xlsx) with “Mobile Number” column
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="namelist"
@@ -134,7 +179,10 @@ export default function Home() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="message">Message Template (.txt)</Label>
+                <Label htmlFor="message">
+                  Message Template (.txt)
+                  <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="message"
                   name="message"
@@ -146,7 +194,7 @@ export default function Home() {
 
               <div className="grid gap-2">
                 <Label htmlFor="images">
-                  Optional Images (png, jpg, jpeg, gif, bmp, ico, webp)
+                  Images (png, jpg, jpeg, gif, bmp, ico, webp)
                 </Label>
                 <Input
                   id="images"
@@ -158,7 +206,7 @@ export default function Home() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="document">Optional Document</Label>
+                <Label htmlFor="document">Document</Label>
                 <Input id="document" name="document" type="file" />
               </div>
 
@@ -198,31 +246,63 @@ export default function Home() {
           </CardFooter>
         </Card>
 
-        {/* RIGHT: big screenshot panel */}
-        <Card className="shadow-lg lg:sticky lg:top-6 self-start h-full w-full col-span-2">
-          <CardHeader>
-            <CardTitle>Screenshot Result</CardTitle>
-          </CardHeader>
-          <CardContent className="my-auto">
-            <div className="rounded border overflow-hidden bg-black/5">
-              <div className="aspect-video w-full">
-                {imageUrl ? (
-                  <img
-                    src={imageUrl}
-                    alt="Result screenshot"
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
-                    {jobId
-                      ? "Waiting for screenshot..."
-                      : "Start a job to see the screenshot here."}
-                  </div>
-                )}
+        {/* --- Right column (desktop only): Instructions + Screenshot stack --- */}
+        <div className="hidden lg:flex lg:col-span-2 lg:flex-col lg:gap-6 lg:sticky lg:top-6">
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle>Instructions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="list-decimal pl-5 space-y-2">
+                <li>
+                  Upload the Namelist Excel file. (Must contain the column name
+                  <code className="px-1">Mobile Number</code>)
+                </li>
+                <li>
+                  Upload the Message Template file. (Use{" "}
+                  <code className="px-1">{`{Name}`}</code> to personalize with
+                  the <code className="px-1">Name</code> column)
+                </li>
+                <li>Upload Image file(s) [Optional, &lt; 16 MB each]</li>
+                <li>Upload Document file [Optional, &lt; 16 MB]</li>
+                <li>Click “Send Message”.</li>
+                <li>Use “Reset” to clear selections.</li>
+              </ol>
+              <div className="mt-5">
+                <p className="font-medium">Note</p>
+                <p>
+                  Custom images require an image path and an{" "}
+                  <code className="px-1">ImageURL</code> column in Excel.
+                </p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle>Screenshot Result</CardTitle>
+            </CardHeader>
+            <CardContent className="my-auto">
+              <div className="rounded border overflow-hidden bg-black/5">
+                <div className="aspect-video w-full">
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt="Result screenshot"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
+                      {jobId
+                        ? "Waiting for screenshot..."
+                        : "Start a job to see the screenshot here."}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

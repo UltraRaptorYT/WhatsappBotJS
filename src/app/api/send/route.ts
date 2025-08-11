@@ -293,7 +293,7 @@ export async function POST(req: Request) {
         await browser?.close();
       } catch {}
       appendLog(jobId, "Browser closed");
-      appendLog(jobId, "Done.", "SUCESS");
+      appendLog(jobId, "Done.", "SUCCESS");
     }
   })();
 
